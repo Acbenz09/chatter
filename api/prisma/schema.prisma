@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  name            String
+  email           String
+  emailVerified   Boolean
+  image           String?
+  createdAt       DateTime
+  updatedAt       DateTime
+  username        String?
+  displayUsername String?
+  sessions        Session[]
+  accounts        Account[]
+
+  sentMessages      Message[]          @relation("SenderMessages")
+  receivedMessages  Message[]          @relation("ReceiverMessages")
+  groupMemberships  GroupMember[]
+  joinRequests      GroupJoinRequest[]
+  sentGroupMessages GroupMessage[]     @relation("GroupMessageSender")
+
+  @@unique([email])
+  @@unique([username])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime
+  updatedAt DateTime
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime
+  updatedAt             DateTime
+
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime?
+  updatedAt  DateTime?
+
+  @@map("verification")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+
+  // 1v1 chat references
+  senderId   String
+  receiverId String
+
+  sender   User @relation("SenderMessages", fields: [senderId], references: [id])
+  receiver User @relation("ReceiverMessages", fields: [receiverId], references: [id])
+
+  // group chat
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id])
+
+  @@map("messages")
+}
+
+model Group {
+  id        String @id @default(cuid())
+  name      String
+  username  String @unique
+  groupCode String @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  groupMessages     GroupMessage[]
+  members           GroupMember[]
+  groupJoinRequests GroupJoinRequest[]
+  messages          Message[]
+
+  @@map("groups")
+}
+
+model GroupMessage {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+
+  senderId String
+  sender   User   @relation("GroupMessageSender", fields: [senderId], references: [id])
+
+  groupId String
+  group   Group  @relation(fields: [groupId], references: [id])
+
+  @@map("group_messages")
+}
+
+model GroupMember {
+  id       String   @id @default(cuid())
+  userId   String
+  groupId  String
+  role     Role     @default(Member)
+  joinedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  group Group @relation(fields: [groupId], references: [id])
+
+  @@unique([userId, groupId])
+  @@map("group_members")
+}
+
+model GroupJoinRequest {
+  id            String          @id @default(cuid())
+  userId        String
+  groupId       String
+  createdAt     DateTime        @default(now())
+  requestStatus GroupJoinStatus @default(Pending)
+
+  user  User  @relation(fields: [userId], references: [id])
+  group Group @relation(fields: [groupId], references: [id])
+
+  @@unique([userId, groupId])
+  @@map("group_join_requests")
+}
+
+enum Role {
+  Admin
+  Member
+}
+
+enum GroupJoinStatus {
+  Pending
+  Accepted
+  Rejected
+}
